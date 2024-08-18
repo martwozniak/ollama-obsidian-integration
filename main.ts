@@ -8,14 +8,10 @@ import {
 	PluginSettingTab,
 	Setting,
 	DropdownComponent,
-	EditorSuggest,
-	EditorPosition,
-	TFile,
-	EditorSuggestContext,
-	EditorSuggestTriggerInfo
 } from 'obsidian';
 import {OllamaService} from "./src/services/OllamaService";
 import {DEFAULT_SETTINGS, OllamaPluginSettings} from "./src/models/OllamaPluginSettings";
+import {OllamaSuggestor} from "./src/OllamaSuggestor";
 
 export default class OllamaPlugin extends Plugin {
 	settings: OllamaPluginSettings;
@@ -140,8 +136,6 @@ export default class OllamaPlugin extends Plugin {
 			editor.replaceRange('\n', cursor);
 
 			let response = '';
-			let updateTimeout: NodeJS.Timeout | null = null;
-			const updateInterval = 100; // Update every 100ms
 
 			const updateEditor = () => {
 				// editor.setLine(cursor.line + 1, response);
@@ -149,20 +143,11 @@ export default class OllamaPlugin extends Plugin {
 				editor.scrollIntoView({from: cursor, to: cursor}, true);
 			};
 
-			// await this.generateOllamaResponse(prompt, (chunk) => {
-			// 	response += chunk;
-			// 	updateEditor();
-			// });
-			// use my custom service to generate response
 			 await this.ollamaService.generateResponse(prompt, (chunk) => {
 				response += chunk;
 				updateEditor();
 			});
 
-			// Ensure final update is applied
-			if (updateTimeout) {
-				clearTimeout(updateTimeout);
-			}
 			updateEditor();
 
 			// Move the cursor to the end of the response
@@ -293,40 +278,5 @@ class OllamaSettingTab extends PluginSettingTab {
 			this.plugin.settings.modelName = value;
 			await this.plugin.saveSettings();
 		});
-	}
-}
-
-class OllamaSuggestor extends EditorSuggest<string> {
-	plugin: OllamaPlugin;
-
-	constructor(app: App, plugin: OllamaPlugin) {
-		super(app);
-		this.plugin = plugin;
-	}
-
-	onTrigger(cursor: EditorPosition, editor: Editor, file: TFile): EditorSuggestTriggerInfo | null {
-		const line = editor.getLine(cursor.line).slice(0, cursor.ch);
-		if (line.endsWith('/')) {
-			return {
-				start: { line: cursor.line, ch: cursor.ch - 1 },
-				end: cursor,
-				query: '/'
-			};
-		}
-		return null;
-	}
-
-	getSuggestions(context: EditorSuggestContext): string[] {
-		return ['ollama'];
-	}
-
-	renderSuggestion(suggestion: string, el: HTMLElement): void {
-		el.setText(suggestion);
-	}
-
-	selectSuggestion(suggestion: string): void {
-		const editor = this.context.editor;
-		const cursor = editor.getCursor();
-		editor.replaceRange(suggestion + ' ', { line: cursor.line, ch: cursor.ch - 1 }, cursor);
 	}
 }
