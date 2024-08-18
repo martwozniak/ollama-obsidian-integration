@@ -14,20 +14,13 @@ import {
 	EditorSuggestContext,
 	EditorSuggestTriggerInfo
 } from 'obsidian';
-
-interface OllamaPluginSettings {
-	ollamaUrl: string;
-	modelName: string;
-}
-
-const DEFAULT_SETTINGS: OllamaPluginSettings = {
-	ollamaUrl: 'http://localhost:11434',
-	modelName: 'llama2'
-}
+import {OllamaService} from "./src/services/OllamaService";
+import {DEFAULT_SETTINGS, OllamaPluginSettings} from "./src/models/OllamaPluginSettings";
 
 export default class OllamaPlugin extends Plugin {
 	settings: OllamaPluginSettings;
 	suggestor: OllamaSuggestor;
+	ollamaService: OllamaService;
 
 	private isProcessingCommand = false;
 
@@ -127,54 +120,14 @@ export default class OllamaPlugin extends Plugin {
 		}
 	}
 
-	async generateOllamaResponse(prompt: string, onChunk: (chunk: string) => void): Promise<void> {
-		try {
-			const response = await fetch(`${this.settings.ollamaUrl}/api/generate`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					"model": this.settings.modelName,
-					"prompt": prompt,
-					"stream": true,
-				}),
+	async generateOllamaResponse(editor: Editor, view: MarkdownView) {
+		const selection = editor.getSelection();
+		if (selection) {
+			this.ollamaService.generateResponse(selection, (response) => {
+				editor.replaceSelection(response);
 			});
-
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
-
-			const reader = response.body?.getReader();
-			if (!reader) {
-				throw new Error('Response body is not readable');
-			}
-
-			const decoder = new TextDecoder();
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-
-				const chunk = decoder.decode(value);
-				const lines = chunk.split('\n');
-				for (const line of lines) {
-					if (line.trim() === '') continue;
-					try {
-						const parsed = JSON.parse(line);
-						if (parsed.response) {
-							onChunk(parsed.response);
-						}
-					} catch (e) {
-						console.error('Error parsing JSON:', e);
-					}
-				}
-			}
-		} catch (error) {
-			console.error('Error generating Ollama response:', error);
-			onChunk(`Error: Failed to generate response from Ollama. Details: ${error.message}`);
 		}
 	}
-
 	async processOllamaCommand(editor: Editor, raw_prompt: string) {
 		const cursor = editor.getCursor();
 			const prompt = raw_prompt;
