@@ -1,4 +1,19 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, DropdownComponent } from 'obsidian';
+import {
+	App,
+	Editor,
+	MarkdownView,
+	Modal,
+	Notice,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	DropdownComponent,
+	EditorSuggest,
+	EditorPosition,
+	TFile,
+	EditorSuggestContext,
+	EditorSuggestTriggerInfo
+} from 'obsidian';
 
 interface OllamaPluginSettings {
 	ollamaUrl: string;
@@ -12,6 +27,7 @@ const DEFAULT_SETTINGS: OllamaPluginSettings = {
 
 export default class OllamaPlugin extends Plugin {
 	settings: OllamaPluginSettings;
+	suggestor: OllamaSuggestor;
 
 	async onload() {
 		await this.loadSettings();
@@ -31,6 +47,20 @@ export default class OllamaPlugin extends Plugin {
 			}
 		});
 
+		// Add the new command for /ollama syntax
+		this.addCommand({
+			id: 'process-ollama-inline-command',
+			name: 'Process /ollama command',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				console.log('[ollama command]')
+				this.processOllamaCommand(editor);
+			}
+		});
+
+		// Initialize the suggestor
+		this.suggestor = new OllamaSuggestor(this.app, this);
+		this.registerEditorSuggest(this.suggestor);
+
 		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
 			id: 'generate-ollama-response',
@@ -47,6 +77,11 @@ export default class OllamaPlugin extends Plugin {
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new OllamaSettingTab(this.app, this));
+
+		//Add event listener for keypress events
+		this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
+			this.handleKeyPress(evt);
+		});
 	}
 
 	onunload() {}
@@ -57,6 +92,26 @@ export default class OllamaPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	handleKeyPress(evt: KeyboardEvent) {
+		console.log('[key clicked]', evt)
+		console.log('[key]', evt.key)
+
+		if (evt.key === 'Enter') {
+			console.log('[etnter clicked]')
+			const activeLeaf = this.app.workspace.activeLeaf;
+			if (activeLeaf.view instanceof MarkdownView) {
+				const editor = activeLeaf.view.editor;
+				const cursor = editor.getCursor();
+				const line = editor.getLine(cursor.line - 1);
+				console.log('[current line]', line)
+				if (line.trim().startsWith('ollama ')) {
+					evt.preventDefault();
+					this.processOllamaCommand(editor);
+				}
+			}
+		}
 	}
 
 	async generateOllamaResponse(prompt: string, onChunk: (chunk: string) => void): Promise<void> {
@@ -107,6 +162,70 @@ export default class OllamaPlugin extends Plugin {
 		}
 	}
 
+	async processOllamaCommand(editor: Editor) {
+		const cursor = editor.getCursor();
+		const initialLine = editor.getLine(cursor.line - 1);
+		const match = initialLine.match(/^ollama\s+(.+)$/);
+		if (match) {
+			const prompt = match[1];
+
+			// Clear the current line
+			editor.setLine(cursor.line, '');
+
+			// Move cursor to the end of the current line
+			editor.setCursor(cursor.line, 0);
+
+			// Insert a new line for the response
+			editor.replaceRange('\n', cursor);
+
+			let fullResponse = '';
+			let currentFragment = '';
+			let updateTimeout: NodeJS.Timeout | null = null;
+			const updateInterval = 100; // Update every 100ms
+
+			const updateEditor = () => {
+				editor.setLine(cursor.line + 1, fullResponse);
+				editor.scrollIntoView({from: cursor, to: cursor}, true);
+			};
+
+			await this.generateOllamaResponse(prompt, (chunk) => {
+				currentFragment += chunk;
+
+				// Check if we have a complete sentence or a significant fragment
+				if (chunk.endsWith('.') || chunk.endsWith('!') || chunk.endsWith('?') || currentFragment.length > 100) {
+					// Remove any repeated starts
+					currentFragment = currentFragment.replace(/^(As an AI,?|Bonj(our)?)\s*/g, '');
+
+					// If the fragment is not just whitespace, add it to the full response
+					if (currentFragment.trim()) {
+						fullResponse += (fullResponse ? ' ' : '') + currentFragment.trim();
+						currentFragment = '';
+					}
+
+					if (updateTimeout === null) {
+						updateTimeout = setTimeout(() => {
+							updateEditor();
+							updateTimeout = null;
+						}, updateInterval);
+					}
+				}
+			});
+
+			// Ensure final update is applied
+			if (updateTimeout) {
+				clearTimeout(updateTimeout);
+			}
+			if (currentFragment.trim()) {
+				fullResponse += (fullResponse ? ' ' : '') + currentFragment.trim();
+			}
+			updateEditor();
+
+			// Move the cursor to the end of the response
+			editor.setCursor(cursor.line + 1 + fullResponse.split('\n').length - 1, 0);
+
+			new Notice('Ollama response generated');
+		}
+	}
 	async fetchOllamaModels(): Promise<string[]> {
 		try {
 			const response = await fetch(`${this.settings.ollamaUrl}/api/tags`);
@@ -142,7 +261,11 @@ class OllamaPromptModal extends Modal {
 			attr: { rows: '4', cols: '50', placeholder: 'Enter your prompt here' }
 		});
 
-		const generateButton = contentEl.createEl('button', { text: 'Generate Response' });
+		contentEl.createEl('br');
+
+		const generateButton = contentEl.createEl('button', { text: 'Generate Response', attr: {
+			style: 'margin-top: 10px; margin-bottom: 10px;'}
+		});
 		generateButton.addEventListener('click', this.generateResponse.bind(this));
 
 		this.responseOutput = contentEl.createEl('div', { cls: 'ollama-response' });
@@ -234,5 +357,40 @@ class OllamaSettingTab extends PluginSettingTab {
 			this.plugin.settings.modelName = value;
 			await this.plugin.saveSettings();
 		});
+	}
+}
+
+class OllamaSuggestor extends EditorSuggest<string> {
+	plugin: OllamaPlugin;
+
+	constructor(app: App, plugin: OllamaPlugin) {
+		super(app);
+		this.plugin = plugin;
+	}
+
+	onTrigger(cursor: EditorPosition, editor: Editor, file: TFile): EditorSuggestTriggerInfo | null {
+		const line = editor.getLine(cursor.line).slice(0, cursor.ch);
+		if (line.endsWith('/')) {
+			return {
+				start: { line: cursor.line, ch: cursor.ch - 1 },
+				end: cursor,
+				query: '/'
+			};
+		}
+		return null;
+	}
+
+	getSuggestions(context: EditorSuggestContext): string[] {
+		return ['ollama'];
+	}
+
+	renderSuggestion(suggestion: string, el: HTMLElement): void {
+		el.setText(suggestion);
+	}
+
+	selectSuggestion(suggestion: string): void {
+		const editor = this.context.editor;
+		const cursor = editor.getCursor();
+		editor.replaceRange(suggestion + ' ', { line: cursor.line, ch: cursor.ch - 1 }, cursor);
 	}
 }
