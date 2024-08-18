@@ -26,6 +26,7 @@ export default class OllamaPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		this.ollamaService = new OllamaService(this.settings);
 
 		// This creates an icon in the left ribbon.
 		const ribbonIconEl = this.addRibbonIcon('star', 'Ollama AI Integration', (evt: MouseEvent) => {
@@ -120,15 +121,12 @@ export default class OllamaPlugin extends Plugin {
 		}
 	}
 
-	async generateOllamaResponse(editor: Editor, view: MarkdownView) {
-		const selection = editor.getSelection();
-		if (selection) {
-			this.ollamaService.generateResponse(selection, (response) => {
-				editor.replaceSelection(response);
-			});
-		}
+	async generateOllamaResponse(prompt: string, onChunk: (chunk: string) => void): Promise<void> {
+		await this.ollamaService.generateResponse(prompt, onChunk);
 	}
+
 	async processOllamaCommand(editor: Editor, raw_prompt: string) {
+
 		const cursor = editor.getCursor();
 			const prompt = raw_prompt;
 
@@ -151,7 +149,12 @@ export default class OllamaPlugin extends Plugin {
 				editor.scrollIntoView({from: cursor, to: cursor}, true);
 			};
 
-			await this.generateOllamaResponse(prompt, (chunk) => {
+			// await this.generateOllamaResponse(prompt, (chunk) => {
+			// 	response += chunk;
+			// 	updateEditor();
+			// });
+			// use my custom service to generate response
+			 await this.ollamaService.generateResponse(prompt, (chunk) => {
 				response += chunk;
 				updateEditor();
 			});
@@ -167,19 +170,11 @@ export default class OllamaPlugin extends Plugin {
 
 			new Notice('Ollama response generated');
 	}
+
 	async fetchOllamaModels(): Promise<string[]> {
-		try {
-			const response = await fetch(`${this.settings.ollamaUrl}/api/tags`);
-			if (!response.ok) {
-				throw new Error('Failed to fetch models');
-			}
-			const data = await response.json();
-			return data.models.map((model: { name: string }) => model.name);
-		} catch (error) {
-			console.error('Error fetching Ollama models:', error);
-			return [];
-		}
+		return this.ollamaService.fetchModels();
 	}
+
 }
 
 class OllamaPromptModal extends Modal {
