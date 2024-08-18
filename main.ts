@@ -29,6 +29,8 @@ export default class OllamaPlugin extends Plugin {
 	settings: OllamaPluginSettings;
 	suggestor: OllamaSuggestor;
 
+	private isProcessingCommand = false;
+
 	async onload() {
 		await this.loadSettings();
 
@@ -53,7 +55,16 @@ export default class OllamaPlugin extends Plugin {
 			name: 'Process /ollama command',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				console.log('[ollama command]')
-				this.processOllamaCommand(editor);
+				const cursor = editor.getCursor();
+				let initialLine = editor.getLine(cursor.line - 1);
+				const match = initialLine.match(/^ollama\s+(.+)$/);
+				if (match && !this.isProcessingCommand) {
+					initialLine = initialLine.replace(/^ollama\s+/, '');
+					this.isProcessingCommand = true;
+					this.processOllamaCommand(editor, initialLine).finally(() => {
+						this.isProcessingCommand = false;
+					});
+				}
 			}
 		});
 
@@ -95,20 +106,22 @@ export default class OllamaPlugin extends Plugin {
 	}
 
 	handleKeyPress(evt: KeyboardEvent) {
-		console.log('[key clicked]', evt)
-		console.log('[key]', evt.key)
-
-		if (evt.key === 'Enter') {
-			console.log('[etnter clicked]')
+		if (evt.key === 'Enter' && !this.isProcessingCommand) {
 			const activeLeaf = this.app.workspace.activeLeaf;
 			if (activeLeaf.view instanceof MarkdownView) {
+
 				const editor = activeLeaf.view.editor;
 				const cursor = editor.getCursor();
-				const line = editor.getLine(cursor.line - 1);
-				console.log('[current line]', line)
-				if (line.trim().startsWith('ollama ')) {
+				let lastLine = editor.getLine(cursor.line - 1);
+				let line = editor.getLine(cursor.line);
+				let initialLine = lastLine.replace(/^ollama\s+/, '');
+				console.log('isProcessingCommand:', lastLine, this.isProcessingCommand);
+				if (lastLine.trim().startsWith('ollama ')) {
 					evt.preventDefault();
-					this.processOllamaCommand(editor);
+					this.isProcessingCommand = true;
+					this.processOllamaCommand(editor, initialLine).finally(() => {
+						this.isProcessingCommand = false;
+					});
 				}
 			}
 		}
@@ -162,12 +175,9 @@ export default class OllamaPlugin extends Plugin {
 		}
 	}
 
-	async processOllamaCommand(editor: Editor) {
+	async processOllamaCommand(editor: Editor, raw_prompt: string) {
 		const cursor = editor.getCursor();
-		const initialLine = editor.getLine(cursor.line - 1);
-		const match = initialLine.match(/^ollama\s+(.+)$/);
-		if (match) {
-			const prompt = match[1];
+			const prompt = raw_prompt;
 
 			// Clear the current line
 			editor.setLine(cursor.line, '');
@@ -178,53 +188,31 @@ export default class OllamaPlugin extends Plugin {
 			// Insert a new line for the response
 			editor.replaceRange('\n', cursor);
 
-			let fullResponse = '';
-			let currentFragment = '';
+			let response = '';
 			let updateTimeout: NodeJS.Timeout | null = null;
 			const updateInterval = 100; // Update every 100ms
 
 			const updateEditor = () => {
-				editor.setLine(cursor.line + 1, fullResponse);
+				// editor.setLine(cursor.line + 1, response);
+				editor.setValue(response);
 				editor.scrollIntoView({from: cursor, to: cursor}, true);
 			};
 
 			await this.generateOllamaResponse(prompt, (chunk) => {
-				currentFragment += chunk;
-
-				// Check if we have a complete sentence or a significant fragment
-				if (chunk.endsWith('.') || chunk.endsWith('!') || chunk.endsWith('?') || currentFragment.length > 100) {
-					// Remove any repeated starts
-					currentFragment = currentFragment.replace(/^(As an AI,?|Bonj(our)?)\s*/g, '');
-
-					// If the fragment is not just whitespace, add it to the full response
-					if (currentFragment.trim()) {
-						fullResponse += (fullResponse ? ' ' : '') + currentFragment.trim();
-						currentFragment = '';
-					}
-
-					if (updateTimeout === null) {
-						updateTimeout = setTimeout(() => {
-							updateEditor();
-							updateTimeout = null;
-						}, updateInterval);
-					}
-				}
+				response += chunk;
+				updateEditor();
 			});
 
 			// Ensure final update is applied
 			if (updateTimeout) {
 				clearTimeout(updateTimeout);
 			}
-			if (currentFragment.trim()) {
-				fullResponse += (fullResponse ? ' ' : '') + currentFragment.trim();
-			}
 			updateEditor();
 
 			// Move the cursor to the end of the response
-			editor.setCursor(cursor.line + 1 + fullResponse.split('\n').length - 1, 0);
+			editor.setCursor(cursor.line + 1 + response.split('\n').length - 1, 0);
 
 			new Notice('Ollama response generated');
-		}
 	}
 	async fetchOllamaModels(): Promise<string[]> {
 		try {

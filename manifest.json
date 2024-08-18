@@ -1,11 +1,11 @@
 {
-	"id": "ollama-ai-chat-plugin",
-	"name": "Ollama AI Chat - Local LLM",
+	"id": "ollama-integration",
+	"name": "Ollama Integration - AI Chat - Local LLM",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Integrates Ollama AI Chat into Obsidian",
+	"description": "Ollama Integration - Integrates local ollama with Obsidian",
 	"author": "Marcin Woźniak",
 	"authorUrl": "https://github.com/martwozniak",
-	"fundingUrl": "https://github.com/martwozniak",
-	"isDesktopOnly": false
+	"fundingUrl": "https://www.patreon.com/marcinwozniak",
+	"isDesktopOnly": true
 }
