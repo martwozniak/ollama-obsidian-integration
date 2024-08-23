@@ -3,7 +3,7 @@
 	"name": "Ollama Integration - AI Chat - Local LLM",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Ollama Integration - Integrates local ollama with Obsidian",
+	"description": "Ollama Integration - Chat with your local AI",
 	"author": "Marcin Woźniak",
 	"authorUrl": "https://github.com/martwozniak",
 	"fundingUrl": "https://www.patreon.com/marcinwozniak",
