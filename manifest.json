@@ -1,7 +1,7 @@
 {
 	"id": "ollama-integration",
 	"name": "Ollama Integration - AI Chat - Local LLM",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"minAppVersion": "0.15.0",
 	"description": "Ollama Integration - Chat with your local AI",
 	"author": "Marcin Woźniak",
