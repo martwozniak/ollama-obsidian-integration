@@ -38,7 +38,7 @@ export default class OllamaPlugin extends Plugin {
 
 		// Add the new command for /ollama syntax
 		this.addCommand({
-			id: 'process-ollama-inline-command',
+			id: 'process-ollama-inline',
 			name: 'Process /ollama command',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				console.log('[ollama command]')
