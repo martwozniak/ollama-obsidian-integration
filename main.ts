@@ -99,9 +99,8 @@ export default class OllamaPlugin extends Plugin {
 
 				const editor = activeLeaf.view.editor;
 				const cursor = editor.getCursor();
-				let lastLine = editor.getLine(cursor.line - 1);
-				let line = editor.getLine(cursor.line);
-				let initialLine = lastLine.replace(/^ollama\s+/, '');
+				const lastLine = editor.getLine(cursor.line - 1);
+				const initialLine = lastLine.replace(/^ollama\s+/, '');
 				console.log('isProcessingCommand:', lastLine, this.isProcessingCommand);
 				if (lastLine.trim().startsWith('ollama ')) {
 					evt.preventDefault();
@@ -140,7 +139,7 @@ export default class OllamaPlugin extends Plugin {
 				editor.scrollIntoView({from: cursor, to: cursor}, true);
 			};
 
-			 await this.ollamaService.generateResponse(prompt, (chunk) => {
+			await this.ollamaService.generateResponse(prompt, (chunk) => {
 				response += chunk;
 				updateEditor();
 			});
