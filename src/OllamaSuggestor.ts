@@ -37,9 +37,9 @@ export class OllamaSuggestor extends EditorSuggest<string> {
 		el.setText(suggestion);
 	}
 
-	selectSuggestion(suggestion: string): void {
-		const editor = this.context.editor;
-		const cursor = editor.getCursor();
-		editor.replaceRange(suggestion + ' ', { line: cursor.line, ch: cursor.ch - 1 }, cursor);
+	selectSuggestion(suggestion: string, evt: MouseEvent | KeyboardEvent): void {
+		if (!this.context) return;
+		const { editor, start, end } = this.context;
+		editor.replaceRange(suggestion + ' ', start, end);
 	}
 }

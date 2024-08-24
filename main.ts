@@ -92,11 +92,11 @@ export default class OllamaPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+
 	handleKeyPress(evt: KeyboardEvent) {
 		if (evt.key === 'Enter' && !this.isProcessingCommand) {
 			const activeLeaf = this.app.workspace.activeLeaf;
-			if (activeLeaf.view instanceof MarkdownView) {
-
+			if (activeLeaf?.view instanceof MarkdownView) {
 				const editor = activeLeaf.view.editor;
 				const cursor = editor.getCursor();
 				const lastLine = editor.getLine(cursor.line - 1);

@@ -5,7 +5,7 @@ import {
 	DropdownComponent,
 	Notice
 } from 'obsidian';
-import OllamaPlugin from './main';
+import OllamaPlugin from "../main";
 
 export class OllamaSettingTab extends PluginSettingTab {
 	plugin: OllamaPlugin;
@@ -63,7 +63,7 @@ export class OllamaSettingTab extends PluginSettingTab {
 
 	async updateModelDropdown() {
 		const models = await this.plugin.fetchOllamaModels();
-		this.modelDropdown.clear();
+		this.modelDropdown.selectEl.empty();
 		models.forEach((model) => {
 			this.modelDropdown.addOption(model, model);
 		});
